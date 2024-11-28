@@ -3,6 +3,7 @@ import pymysql
 import boto3
 from fpdf import FPDF
 import os
+import requests  # Para llamar al módulo Notificaciones
 
 app = Flask(__name__)
 
@@ -13,6 +14,7 @@ db_password = os.getenv("DB_PASSWORD")
 db_name = os.getenv("DB_NAME")
 s3_bucket = os.getenv("S3_BUCKET")
 aws_region = os.getenv("AWS_REGION")
+NOTIFICACIONES_URL = os.getenv("NOTIFICACIONES_URL")  # Ejemplo: http://notificaciones:5002
 
 db = pymysql.connect(
     host=db_host,
@@ -23,7 +25,6 @@ db = pymysql.connect(
 
 s3 = boto3.client('s3', region_name=aws_region)
 
-# CRUD de Notas de Venta
 @app.route('/notas_venta', methods=['POST'])
 def crear_nota_venta():
     data = request.json
@@ -53,7 +54,20 @@ def crear_nota_venta():
     archivo_pdf = generar_pdf(id_nota, data)
     subir_a_s3(archivo_pdf)
 
-    return jsonify({'mensaje': 'Nota de venta creada exitosamente'}), 201
+    # Llamar al módulo Notificaciones
+    notificacion_payload = {
+        "correo": data.get('Correo_Electronico'),
+        "mensaje": f"Tu nota de venta #{id_nota} ha sido creada exitosamente."
+    }
+
+    try:
+        response = requests.post(f"{NOTIFICACIONES_URL}/notificaciones", json=notificacion_payload)
+        if response.status_code == 200:
+            return jsonify({'mensaje': 'Nota de venta creada y notificación enviada exitosamente'}), 201
+        else:
+            return jsonify({'error': 'Error al enviar la notificación', 'detalle': response.json()}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 def generar_pdf(id_nota, data):
     pdf = FPDF()

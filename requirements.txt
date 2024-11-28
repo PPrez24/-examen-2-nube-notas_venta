@@ -2,3 +2,4 @@ flask
 pymysql
 boto3
 fpdf
+requests
