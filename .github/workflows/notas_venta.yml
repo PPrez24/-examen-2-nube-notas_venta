@@ -1,4 +1,4 @@
-name: Build and Push to ECR - Modulo Notas de Venta
+name: Build and Push to ECR - Modulo de Notas de Venta
 
 on:
   push:
