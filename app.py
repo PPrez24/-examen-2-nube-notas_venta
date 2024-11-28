@@ -14,7 +14,7 @@ db_password = os.getenv("DB_PASSWORD")
 db_name = os.getenv("DB_NAME")
 s3_bucket = os.getenv("S3_BUCKET")
 aws_region = os.getenv("AWS_REGION")
-NOTIFICACIONES_URL = "http://notificaciones:5002"
+NOTIFICACIONES_URL = "http://54.221.150.143:5002"
 
 db = pymysql.connect(
     host=db_host,
@@ -23,7 +23,12 @@ db = pymysql.connect(
     db=db_name
 )
 
-s3 = boto3.client('s3', region_name=aws_region)
+s3 = boto3.client('s3',
+    region_name=os.getenv("AWS_REGION"),
+    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+    aws_session_token=os.getenv("AWS_SESSION_TOKEN")  # Solo si usas tokens temporales
+)
 
 @app.route('/notas_venta', methods=['POST'])
 def crear_nota_venta():
