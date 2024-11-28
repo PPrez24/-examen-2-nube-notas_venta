@@ -3,6 +3,7 @@ import pymysql
 import boto3
 from fpdf import FPDF
 import os
+import requests
 import botocore.exceptions
 
 app = Flask(__name__)
