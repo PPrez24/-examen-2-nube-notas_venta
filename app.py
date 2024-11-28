@@ -14,7 +14,7 @@ db_password = os.getenv("DB_PASSWORD")
 db_name = os.getenv("DB_NAME")
 s3_bucket = os.getenv("S3_BUCKET")
 aws_region = os.getenv("AWS_REGION")
-NOTIFICACIONES_URL = os.getenv("NOTIFICACIONES_URL")  # Ejemplo: http://notificaciones:5002
+NOTIFICACIONES_URL = "http://localhost:5002"
 
 db = pymysql.connect(
     host=db_host,
