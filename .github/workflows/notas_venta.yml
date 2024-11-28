@@ -33,12 +33,14 @@ jobs:
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           DB_NAME: ${{ secrets.DB_NAME }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           docker build --build-arg DB_HOST=$DB_HOST \
                        --build-arg DB_USER=$DB_USER \
                        --build-arg DB_PASSWORD=$DB_PASSWORD \
                        --build-arg DB_NAME=$DB_NAME \
                        --build-arg S3_BUCKET=$S3_BUCKET \
+                       --build-arg AWS_REGION=$AWS_REGION \
                        -t notas-venta:latest .
           aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
           docker login --username AWS --password-stdin $ECR_URI

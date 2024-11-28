@@ -3,7 +3,7 @@ import pymysql
 import boto3
 from fpdf import FPDF
 import os
-import requests  # Para llamar al módulo Notificaciones
+import botocore.exceptions
 
 app = Flask(__name__)
 
@@ -16,6 +16,7 @@ s3_bucket = os.getenv("S3_BUCKET")
 aws_region = os.getenv("AWS_REGION")
 NOTIFICACIONES_URL = "http://54.221.150.143:5002"
 
+# Inicializar conexión a la base de datos
 db = pymysql.connect(
     host=db_host,
     user=db_user,
@@ -23,12 +24,9 @@ db = pymysql.connect(
     db=db_name
 )
 
-s3 = boto3.client('s3',
-    region_name=os.getenv("AWS_REGION"),
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    aws_session_token=os.getenv("AWS_SESSION_TOKEN")  # Solo si usas tokens temporales
-)
+# Inicializar clientes de AWS
+s3 = boto3.client('s3', region_name=aws_region)
+sns = boto3.client('sns', region_name=aws_region)
 
 @app.route('/notas_venta', methods=['POST'])
 def crear_nota_venta():
@@ -37,40 +35,45 @@ def crear_nota_venta():
         return jsonify({'error': 'Cliente, Dirección de Facturación y Total son requeridos'}), 400
     cursor = db.cursor()
 
-    # Insertar nota de venta
-    consulta = """
-        INSERT INTO NotasVenta (Cliente_ID, Direccion_Facturacion, Direccion_Envio, Total_Nota)
-        VALUES (%s, %s, %s, %s)
-    """
-    cursor.execute(consulta, (data['Cliente_ID'], data['Direccion_Facturacion'], data.get('Direccion_Envio'), data['Total_Nota']))
-    id_nota = cursor.lastrowid
-
-    # Insertar contenido de la nota
-    for item in data.get('Contenido', []):
-        consulta_contenido = """
-            INSERT INTO ContenidoNotas (Nota_ID, Producto_ID, Cantidad, Precio_Unitario, Importe)
-            VALUES (%s, %s, %s, %s, %s)
-        """
-        cursor.execute(consulta_contenido, (id_nota, item['Producto_ID'], item['Cantidad'], item['Precio_Unitario'], item['Importe']))
-
-    db.commit()
-
-    # Generar PDF
-    archivo_pdf = generar_pdf(id_nota, data)
-    subir_a_s3(archivo_pdf)
-
-    # Llamar al módulo Notificaciones
-    notificacion_payload = {
-        "correo": data.get('Correo_Electronico'),
-        "mensaje": f"Tu nota de venta #{id_nota} ha sido creada exitosamente."
-    }
-
     try:
+        # Insertar nota de venta
+        consulta = """
+            INSERT INTO NotasVenta (Cliente_ID, Direccion_Facturacion, Direccion_Envio, Total_Nota)
+            VALUES (%s, %s, %s, %s)
+        """
+        cursor.execute(consulta, (data['Cliente_ID'], data['Direccion_Facturacion'], data.get('Direccion_Envio'), data['Total_Nota']))
+        id_nota = cursor.lastrowid
+
+        # Insertar contenido de la nota
+        for item in data.get('Contenido', []):
+            consulta_contenido = """
+                INSERT INTO ContenidoNotas (Nota_ID, Producto_ID, Cantidad, Precio_Unitario, Importe)
+                VALUES (%s, %s, %s, %s, %s)
+            """
+            cursor.execute(consulta_contenido, (id_nota, item['Producto_ID'], item['Cantidad'], item['Precio_Unitario'], item['Importe']))
+
+        db.commit()
+
+        # Generar PDF
+        archivo_pdf = generar_pdf(id_nota, data)
+        subir_a_s3(archivo_pdf)
+
+        # Llamar al módulo Notificaciones
+        notificacion_payload = {
+            "correo": data.get('Correo_Electronico'),
+            "mensaje": f"Tu nota de venta #{id_nota} ha sido creada exitosamente."
+        }
         response = requests.post(f"{NOTIFICACIONES_URL}/notificaciones", json=notificacion_payload)
-        if response.status_code == 200:
-            return jsonify({'mensaje': 'Nota de venta creada y notificación enviada exitosamente'}), 201
-        else:
-            return jsonify({'error': 'Error al enviar la notificación', 'detalle': response.json()}), 500
+        response.raise_for_status()
+
+        return jsonify({'mensaje': 'Nota de venta creada y notificación enviada exitosamente'}), 201
+
+    except botocore.exceptions.NoCredentialsError:
+        return jsonify({'error': 'Credenciales de AWS no configuradas correctamente'}), 500
+    except botocore.exceptions.ClientError as e:
+        return jsonify({'error': f"Error al interactuar con AWS: {str(e)}"}), 500
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': 'Error al enviar la notificación', 'detalle': str(e)}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -91,7 +94,10 @@ def generar_pdf(id_nota, data):
     return nombre_archivo
 
 def subir_a_s3(nombre_archivo):
-    s3.upload_file(nombre_archivo, s3_bucket, nombre_archivo)
+    try:
+        s3.upload_file(nombre_archivo, s3_bucket, nombre_archivo)
+    except botocore.exceptions.ClientError as e:
+        raise Exception(f"Error al subir archivo a S3: {str(e)}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)
