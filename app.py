@@ -55,14 +55,15 @@ def crear_nota_venta():
 
         db.commit()
 
-        # Generar PDF
+        # Generar PDF y subir a S3
         archivo_pdf = generar_pdf(id_nota, data)
-        subir_a_s3(archivo_pdf)
+        url_pdf = subir_a_s3(archivo_pdf)
 
         # Llamar al módulo Notificaciones
         notificacion_payload = {
             "correo": data.get('Correo_Electronico'),
-            "mensaje": f"Tu nota de venta #{id_nota} ha sido creada exitosamente."
+            "mensaje": f"Tu nota de venta #{id_nota} ha sido creada exitosamente. Puedes descargarla aquí: {url_pdf}",
+            "url_pdf": url_pdf  # Incluir el enlace del PDF
         }
         response = requests.post(f"{NOTIFICACIONES_URL}/notificaciones", json=notificacion_payload)
         response.raise_for_status()
@@ -97,6 +98,8 @@ def generar_pdf(id_nota, data):
 def subir_a_s3(nombre_archivo):
     try:
         s3.upload_file(nombre_archivo, s3_bucket, nombre_archivo)
+        url_pdf = f"https://{s3_bucket}.s3.{aws_region}.amazonaws.com/{nombre_archivo}"
+        return url_pdf
     except botocore.exceptions.ClientError as e:
         raise Exception(f"Error al subir archivo a S3: {str(e)}")
 
